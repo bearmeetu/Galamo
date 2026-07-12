@@ -119,7 +119,7 @@ class _HomePageState extends State<HomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$word，$_username 👋', style: AppTheme.pageHeader),
+        Text('$word，$_username 👋', style: AppTheme.pageHeader.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
         Text(_quote, style: AppTheme.captionText),
       ],

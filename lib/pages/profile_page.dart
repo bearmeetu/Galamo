@@ -1,11 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:overtime/models/overtime_record.dart';
 import 'package:overtime/pages/settings_page.dart';
 import 'package:overtime/services/storage_service.dart';
 import 'package:overtime/theme/app_theme.dart';
 import 'package:overtime/widgets/common_card.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -18,6 +21,7 @@ class _ProfilePageState extends State<ProfilePage> {
   List<MonthSalary> _salaries = [];
   String _username = StorageService.cachedUsername;
   String? _avatar = StorageService.cachedAvatar;
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -40,12 +44,14 @@ class _ProfilePageState extends State<ProfilePage> {
     final sals = await StorageService.loadSalaries();
     final name = await StorageService.loadUsername();
     final avatar = await StorageService.loadAvatar();
+    final info = await PackageInfo.fromPlatform();
     sals.sort((a, b) => '${b.year}${b.month}'.compareTo('${a.year}${a.month}'));
     if (!mounted) return;
     setState(() {
       _salaries = sals;
       _username = name;
       _avatar = avatar;
+      _appVersion = info.version;
     });
   }
 
@@ -78,7 +84,8 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: AppTheme.gapV),
             _menuSection([
               _actionItem(Icons.palette_outlined, '主题外观', '轻治愈 · 莫兰迪', AppTheme.primaryOrange, () => _showInfo(context, '主题外观', '当前主题为「轻治愈 · 莫兰迪」，后续可在设置中扩展更多配色。')),
-              _actionItem(Icons.info_outline_rounded, '关于加了么', 'v1.0.0', AppTheme.secondaryGreen, () => _showInfo(context, '关于加了么', '《加了么》帮助你记录加班、按公司规则计算可申报加班费，并在每月 36h 上限内给出最优申报方案。')),
+              _actionItem(Icons.system_update_rounded, '检查更新', '当前 v$_appVersion', AppTheme.accentBlue, () => _checkUpdate(context)),
+              _actionItem(Icons.info_outline_rounded, '关于加了么', 'v$_appVersion', AppTheme.secondaryGreen, () => _showInfo(context, '关于加了么', '《加了么》帮助你记录加班、按公司规则计算可申报加班费，并在每月 36h 上限内给出最优申报方案。')),
             ]),
           ],
         ),
@@ -232,6 +239,99 @@ class _ProfilePageState extends State<ProfilePage> {
           TextButton(
             onPressed: () => Navigator.pop(c),
             child: const Text('知道了', style: TextStyle(color: AppTheme.primaryOrange)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _checkUpdate(BuildContext context) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => const Center(child: CircularProgressIndicator(color: AppTheme.primaryOrange)),
+    );
+    try {
+      final client = HttpClient();
+      client.badCertificateCallback = (_, __, ___) => true;
+      final req = await client.getUrl(Uri.parse('https://api.github.com/repos/bearmeetu/Galamo/releases/latest'));
+      final res = await req.close();
+      final body = await res.transform(utf8.decoder).join();
+      client.close();
+      if (res.statusCode != 200) throw Exception('请求失败');
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final remoteTag = (json['tag_name'] as String? ?? '').replaceFirst('v', '');
+      final releaseBody = (json['body'] as String? ?? '').trim();
+      final assets = json['assets'] as List<dynamic>? ?? [];
+      String? downloadUrl;
+      if (assets.isNotEmpty) {
+        downloadUrl = assets[0]['browser_download_url'] as String?;
+      }
+      if (!mounted) return;
+      Navigator.pop(context); // 关闭 loading
+      final currentVersion = _appVersion;
+      if (_compareVersion(remoteTag, currentVersion) > 0) {
+        _showUpdateDialog(context, remoteTag, releaseBody, downloadUrl);
+      } else {
+        _showInfo(context, '检查更新', '当前已是最新版本 v$currentVersion');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showInfo(context, '检查更新', '检查失败，请稍后重试');
+    }
+  }
+
+  int _compareVersion(String a, String b) {
+    final pa = a.split('.').map(int.tryParse).toList();
+    final pb = b.split('.').map(int.tryParse).toList();
+    for (var i = 0; i < 3; i++) {
+      final va = (i < pa.length ? pa[i] : 0) ?? 0;
+      final vb = (i < pb.length ? pb[i] : 0) ?? 0;
+      if (va != vb) return va > vb ? 1 : -1;
+    }
+    return 0;
+  }
+
+  void _showUpdateDialog(BuildContext context, String version, String body, String? downloadUrl) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: AppTheme.largeRadius),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: AppTheme.primaryOrange.withValues(alpha: 0.15), borderRadius: AppTheme.smallRadius),
+              child: const Icon(Icons.system_update_rounded, color: AppTheme.primaryOrange, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Text('发现新版本 v$version', style: AppTheme.cardTitle),
+          ],
+        ),
+        content: body.isEmpty
+            ? const Text('有新版本可用，建议立即更新。', style: AppTheme.bodyText)
+            : SingleChildScrollView(child: Text(body, style: AppTheme.bodyText)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('取消', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(c);
+              if (downloadUrl != null) {
+                final uri = Uri.parse(downloadUrl);
+                if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryOrange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: AppTheme.smallRadius),
+            ),
+            child: const Text('去更新'),
           ),
         ],
       ),
