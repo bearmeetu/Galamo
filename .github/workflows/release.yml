@@ -1,0 +1,33 @@
+name: Build & Release APK
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.x'
+          channel: 'stable'
+
+      - run: flutter pub get
+      - run: flutter build apk --release
+
+      - name: Upload APK to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          files: build/app/outputs/flutter-apk/app-release.apk
+          body: |
+            Automatically built from latest commit.
+            Commit: ${{ github.sha }}
+            Time: ${{ github.event.head_commit.timestamp }}
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
