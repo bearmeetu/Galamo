@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:overtime/pages/home_page.dart';
 import 'package:overtime/pages/record_page.dart';
@@ -5,6 +7,8 @@ import 'package:overtime/pages/stats_page.dart';
 import 'package:overtime/pages/analysis_page.dart';
 import 'package:overtime/pages/profile_page.dart';
 import 'package:overtime/services/notification_service.dart';
+import 'package:overtime/services/storage_service.dart';
+import 'package:overtime/services/widget_data_service.dart';
 import 'package:overtime/theme/app_theme.dart';
 
 void main() async {
@@ -18,6 +22,10 @@ void main() async {
   } catch (e) {
     debugPrint('Notification setup skipped due to error: $e');
   }
+  // 进入首屏前先聚合一次桌面小组件所需数据（含历史导入/WebDAV 恢复）
+  unawaited(StorageService.loadRecords()
+      .then((_) => StorageService.loadSalaries())
+      .then((_) => WidgetDataService.refresh()));
   runApp(const JiaLeMeApp());
 }
 

@@ -9,6 +9,7 @@ class OvertimeRecord {
     required this.offSeconds,
     required this.hadMeal,
     required this.leave,
+    this.reason,
   });
 
   final String id;
@@ -17,6 +18,9 @@ class OvertimeRecord {
   final int offSeconds; // 下班时间（秒）
   final bool hadMeal; // 是否用餐（扣 0.5h）
   final bool leave; // 工作日是否请假（请假则不计加班）
+  final String? reason; // 加班原因（可选）
+
+  static const List<String> reasons = ['Jira跟踪', 'Case开发', '会议对齐', 'Fail分析', '知识分享'];
 
   DayType get dayType => HolidayCalendar.classify(date);
 
@@ -48,6 +52,7 @@ class OvertimeRecord {
         'offSeconds': offSeconds,
         'hadMeal': hadMeal,
         'leave': leave,
+        'reason': reason,
       };
 
   factory OvertimeRecord.fromJson(Map<String, dynamic> json) {
@@ -59,6 +64,7 @@ class OvertimeRecord {
       offSeconds: json['offSeconds'] ?? 0,
       hadMeal: json['hadMeal'] ?? false,
       leave: json['leave'] ?? false,
+      reason: json['reason'] as String?,
     );
   }
 }

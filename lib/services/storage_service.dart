@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:overtime/models/overtime_record.dart';
+import 'package:overtime/services/widget_data_service.dart';
 
 /// 本地持久化：打卡记录 + 每月基础工资 + 用户名
 class StorageService {
@@ -21,7 +23,11 @@ class StorageService {
   /// 数据版本号：任何持久化写入后自增，页面监听它即可在“数据真正变化”时刷新，
   /// 而不必在每次切换标签页时重新加载（解决统计页次次刷新问题）。
   static final ValueNotifier<int> dataVersion = ValueNotifier(0);
-  static void _bump() => dataVersion.value++;
+  static void _bump() {
+    dataVersion.value++;
+    // 任何数据变化后同步刷新桌面小组件缓存并通知原生重绘
+    unawaited(WidgetDataService.refresh());
+  }
 
   static List<OvertimeRecord> get cachedRecords => _cachedRecords ?? const [];
   static List<MonthSalary> get cachedSalaries => _cachedSalaries ?? const [];

@@ -1,15 +1,21 @@
 package com.example.overtime
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.example.overtime.widget.DailyOvertimeWidget
+import com.example.overtime.widget.MonthlyOvertimeWidget
+import com.example.overtime.widget.OvertimeWidgetProvider
+import com.example.overtime.widget.ReasonOvertimeWidget
 
 class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "com.example.overtime/cleanup"
+        private const val WIDGET_CHANNEL = "com.example.overtime/widget"
     }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
@@ -26,6 +32,35 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("CLEAR_FAILED", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WIDGET_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "refresh" -> {
+                    try {
+                        // 数据已写入 FlutterSharedPreferences，通知两个小组件重绘
+                        sendBroadcast(
+                            Intent(this, DailyOvertimeWidget::class.java).apply {
+                                action = OvertimeWidgetProvider.ACTION_REFRESH
+                            },
+                        )
+                        sendBroadcast(
+                            Intent(this, MonthlyOvertimeWidget::class.java).apply {
+                                action = OvertimeWidgetProvider.ACTION_REFRESH
+                            },
+                        )
+                        sendBroadcast(
+                            Intent(this, ReasonOvertimeWidget::class.java).apply {
+                                action = OvertimeWidgetProvider.ACTION_REFRESH
+                            },
+                        )
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("WIDGET_REFRESH_FAILED", e.message, null)
                     }
                 }
                 else -> result.notImplemented()

@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
@@ -35,6 +36,51 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- 桌面小组件：每日加班时长柱状图 -->
+        <receiver
+            android:name=".widget.DailyOvertimeWidget"
+            android:exported="false"
+            android:label="每日加班时长">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.overtime.ACTION_WIDGET_REFRESH" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_daily_info" />
+        </receiver>
+
+        <!-- 桌面小组件：当年每月加班时长柱状图 -->
+        <receiver
+            android:name=".widget.MonthlyOvertimeWidget"
+            android:exported="false"
+            android:label="每月加班时长">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.overtime.ACTION_WIDGET_REFRESH" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_monthly_info" />
+        </receiver>
+
+        <!-- 桌面小组件：当月加班原因组成圆环饼图 -->
+        <receiver
+            android:name=".widget.ReasonOvertimeWidget"
+            android:exported="false"
+            android:label="月加班组成">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.overtime.ACTION_WIDGET_REFRESH" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_reason_info" />
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

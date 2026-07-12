@@ -275,7 +275,7 @@ class _HomePageState extends State<HomePage> {
                         children: [
                           Text('${e.date.month}/${e.date.day} ${e.dayTypeLabel}', style: AppTheme.cardTitle.copyWith(fontSize: 16)),
                           const SizedBox(height: 4),
-                          Text('下班 ${e.offLabel}${e.hadMeal ? ' · 用餐' : ''}${e.leave ? ' · 请假' : ''}', style: AppTheme.captionText),
+                           Text('下班 ${e.offLabel}${e.hadMeal ? ' · 用餐' : ''}${e.leave ? ' · 请假' : ''}${e.reason != null ? ' · ${e.reason}' : ''}', style: AppTheme.captionText),
                         ],
                       ),
                     ),

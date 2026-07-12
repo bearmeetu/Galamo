@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_daily_desc">每日加班时长</string>
+    <string name="widget_monthly_desc">每月加班时长</string>
+    <string name="widget_reason_desc">月加班组成</string>
+</resources>

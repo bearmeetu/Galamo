@@ -84,6 +84,8 @@ class _StatsPageState extends State<StatsPage> {
               const SizedBox(height: AppTheme.gapV),
               _barChartCard(dayHours),
               const SizedBox(height: AppTheme.gapV),
+              _donutChartCard(),
+              const SizedBox(height: AppTheme.gapV),
               _planList(plan),
             ],
           ],
@@ -286,6 +288,107 @@ class _StatsPageState extends State<StatsPage> {
   Widget _barGridLines(double scale, double maxH) {
     final levels = max(1, maxH.ceil());
     return CustomPaint(painter: _BarGridPainter(levels: levels, scale: scale, color: AppTheme.divider, barMax: 130));
+  }
+
+  /// 当月各「加班原因」的可申报时长聚合（未选择原因归为「未填写」）
+  Map<String, double> _reasonHoursMap(double baseSalary) {
+    final map = <String, double>{};
+    for (final r in _monthRecords) {
+      final h = OvertimeCalculator.compute(r, baseSalary).claimableHours;
+      final key = r.reason ?? '未填写';
+      map[key] = (map[key] ?? 0) + h;
+    }
+    return map;
+  }
+
+  Color _reasonColor(String reason) {
+    switch (reason) {
+      case 'Jira跟踪':
+        return AppTheme.primaryOrange;
+      case 'Case开发':
+        return AppTheme.accentBlue;
+      case '会议对齐':
+        return AppTheme.secondaryGreen;
+      case 'Fail分析':
+        return AppTheme.warmNeutral;
+      case '知识分享':
+        return AppTheme.blueSoft;
+      default:
+        return AppTheme.divider;
+    }
+  }
+
+  /// 月加班组成：圆环饼图 + 图例，展示各加班原因时长占比。
+  Widget _donutChartCard() {
+    final sal = _salaryFor(_month);
+    if (sal == null) return const SizedBox.shrink();
+    final map = _reasonHoursMap(sal.baseSalary);
+    final total = map.values.fold(0.0, (a, b) => a + b);
+    final ordered = [...OvertimeRecord.reasons, '未填写'];
+    final segments = ordered
+        .where((k) => (map[k] ?? 0) > 0)
+        .map((k) => _Segment(k, map[k]!, _reasonColor(k)))
+        .toList();
+    return CommonCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('月加班组成', style: AppTheme.cardTitle),
+          const SizedBox(height: 8),
+          if (total <= 0)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: Text('本月暂无加班记录', style: AppTheme.captionText)),
+            )
+          else
+            Row(
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CustomPaint(
+                        size: const Size(120, 120),
+                        painter: _DonutPainter(segments: segments, strokeWidth: 18),
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(total.toStringAsFixed(1), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: AppTheme.textPrimary)),
+                          const Text('小时', style: AppTheme.tagText),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    children: segments.map((s) => _legendRow(s, total)).toList(),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendRow(_Segment s, double total) {
+    final pct = total > 0 ? (s.value / total * 100) : 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Container(width: 10, height: 10, decoration: BoxDecoration(color: s.color, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(s.label, style: AppTheme.captionText)),
+          Text('${s.value.toStringAsFixed(1)}h · ${pct.toStringAsFixed(0)}%', style: AppTheme.captionText),
+        ],
+      ),
+    );
   }
 
   Widget _noSalary() => CommonCard(
@@ -522,4 +625,50 @@ class _BarGridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _BarGridPainter old) => old.levels != levels || old.scale != scale;
+}
+
+class _Segment {
+  const _Segment(this.label, this.value, this.color);
+  final String label;
+  final double value;
+  final Color color;
+}
+
+/// 圆环饼图绘制（按各段占比绘制描边扇形）
+class _DonutPainter extends CustomPainter {
+  _DonutPainter({required this.segments, required this.strokeWidth});
+
+  final List<_Segment> segments;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (min(size.width, size.height) - strokeWidth) / 2;
+    final total = segments.fold(0.0, (a, s) => a + s.value);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    if (total <= 0) {
+      paint.color = AppTheme.divider;
+      canvas.drawCircle(center, radius, paint);
+      return;
+    }
+    var start = -pi / 2;
+    for (final s in segments) {
+      final sweep = (s.value / total) * 2 * pi;
+      paint.color = s.color;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        start,
+        sweep,
+        false,
+        paint,
+      );
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutPainter old) => old.segments != segments;
 }

@@ -20,6 +20,7 @@ class _RecordPageState extends State<RecordPage> {
   int _offSeconds = 22 * 3600; // 默认 22:00:00
   bool _hadMeal = false;
   bool _leave = false;
+  String? _reason;
   double? _baseSalary;
   List<OvertimeRecord> _monthRecords = [];
 
@@ -158,7 +159,48 @@ class _RecordPageState extends State<RecordPage> {
         offSeconds: _offSeconds,
         hadMeal: _hadMeal,
         leave: _leave,
+        reason: _reason,
       );
+
+  void _pickReason() {
+    showModalBottomSheet<String?>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.rTop))),
+      builder: (c) => SizedBox(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消', style: TextStyle(color: AppTheme.textSecondary))),
+                  Text('加班原因（可选）', style: AppTheme.cardTitle),
+                  TextButton(
+                    onPressed: () => Navigator.pop(c, ''),
+                    child: const Text('清空', style: TextStyle(color: AppTheme.textSecondary)),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppTheme.divider),
+            ...OvertimeRecord.reasons.map(
+              (r) => ListTile(
+                title: Text(r, style: AppTheme.bodyText),
+                trailing: _reason == r ? const Icon(Icons.check_rounded, color: AppTheme.primaryOrange) : null,
+                onTap: () => Navigator.pop(c, r),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    ).then((v) {
+      if (v != null) setState(() => _reason = v.isEmpty ? null : v);
+    });
+  }
 
   Future<void> _save() async {
     var sals = await StorageService.loadSalaries();
@@ -293,6 +335,8 @@ class _RecordPageState extends State<RecordPage> {
           const Divider(color: AppTheme.divider, height: 1),
           _row('下班时间', OvertimeRecord.fmt(_offSeconds), onTap: () => _pickTime(false)),
           const Divider(color: AppTheme.divider, height: 1),
+          _row('加班原因', _reason ?? '（可选）', onTap: _pickReason),
+          const Divider(color: AppTheme.divider, height: 1),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('有用餐（扣 0.5h）', style: AppTheme.bodyText),
@@ -380,7 +424,7 @@ class _RecordPageState extends State<RecordPage> {
                       children: [
                         Text('${r.date.month}/${r.date.day} · ${r.dayTypeLabel}', style: AppTheme.cardTitle.copyWith(fontSize: 15)),
                         const SizedBox(height: 4),
-                        Text('下班 ${r.offLabel}${r.hadMeal ? ' · 用餐' : ''}${r.leave ? ' · 请假' : ''}', style: AppTheme.captionText),
+                        Text('下班 ${r.offLabel}${r.hadMeal ? ' · 用餐' : ''}${r.leave ? ' · 请假' : ''}${r.reason != null ? ' · ${r.reason}' : ''}', style: AppTheme.captionText),
                       ],
                     ),
                   ),
