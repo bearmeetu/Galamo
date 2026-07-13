@@ -254,24 +254,33 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final client = HttpClient();
       client.badCertificateCallback = (_, __, ___) => true;
-      final req = await client.getUrl(Uri.parse('https://api.github.com/repos/bearmeetu/Galamo/releases/latest'));
-      final res = await req.close();
-      final body = await res.transform(utf8.decoder).join();
+
+      // 1) 从仓库 main 分支的 pubspec.yaml 获取真实版本号
+      final pubReq = await client.getUrl(Uri.parse('https://raw.githubusercontent.com/bearmeetu/Galamo/main/pubspec.yaml'));
+      final pubRes = await pubReq.close();
+      final pubText = await pubRes.transform(utf8.decoder).join();
+      if (pubRes.statusCode != 200) throw Exception('获取版本信息失败');
+      final remoteVersion = _parseVersionFromPubspec(pubText);
+
+      // 2) 从 latest release 获取下载链接和更新日志
+      final relReq = await client.getUrl(Uri.parse('https://api.github.com/repos/bearmeetu/Galamo/releases/latest'));
+      final relRes = await relReq.close();
+      final relBody = await relRes.transform(utf8.decoder).join();
       client.close();
-      if (res.statusCode != 200) throw Exception('请求失败');
-      final json = jsonDecode(body) as Map<String, dynamic>;
-      final remoteTag = (json['tag_name'] as String? ?? '').replaceFirst('v', '');
+      if (relRes.statusCode != 200) throw Exception('请求失败');
+      final json = jsonDecode(relBody) as Map<String, dynamic>;
       final releaseBody = (json['body'] as String? ?? '').trim();
       final assets = json['assets'] as List<dynamic>? ?? [];
       String? downloadUrl;
       if (assets.isNotEmpty) {
         downloadUrl = assets[0]['browser_download_url'] as String?;
       }
+
       if (!mounted) return;
       Navigator.pop(context); // 关闭 loading
       final currentVersion = _appVersion;
-      if (_compareVersion(remoteTag, currentVersion) > 0) {
-        _showUpdateDialog(context, remoteTag, releaseBody, downloadUrl);
+      if (remoteVersion != null && _compareVersion(remoteVersion, currentVersion) > 0) {
+        _showUpdateDialog(context, remoteVersion, releaseBody, downloadUrl);
       } else {
         _showInfo(context, '检查更新', '当前已是最新版本 v$currentVersion');
       }
@@ -280,6 +289,18 @@ class _ProfilePageState extends State<ProfilePage> {
       Navigator.pop(context);
       _showInfo(context, '检查更新', '检查失败，请稍后重试');
     }
+  }
+
+  String? _parseVersionFromPubspec(String content) {
+    for (final line in content.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.startsWith('version:')) {
+        final ver = trimmed.substring('version:'.length).trim();
+        // version 格式: "1.2.0+1"，只取 "+" 前面的部分
+        return ver.split('+').first;
+      }
+    }
+    return null;
   }
 
   int _compareVersion(String a, String b) {
