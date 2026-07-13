@@ -19,7 +19,7 @@ jobs:
           channel: 'stable'
 
       - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/galamo-release.jks
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/galamo-release.jks
 
       - name: Create key.properties
         run: |
