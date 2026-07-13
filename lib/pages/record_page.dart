@@ -69,7 +69,11 @@ class _RecordPageState extends State<RecordPage> {
       builder: (c, child) => Theme(data: Theme.of(c).copyWith(colorScheme: const ColorScheme.light(primary: AppTheme.primaryOrange)), child: child!),
     );
     if (d != null) {
-      setState(() => _date = d);
+      setState(() {
+        _date = d;
+        _onSeconds = null;
+        _leave = false;
+      });
       _load();
     }
   }
