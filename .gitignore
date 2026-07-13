@@ -48,6 +48,11 @@ app.*.map.json
 /android/.gradle/
 /android/build/
 
+# Signing
+*.jks
+*.keystore
+android/key.properties
+
 # Flutter plugin list (regenerated)
 .flutter-plugins
 

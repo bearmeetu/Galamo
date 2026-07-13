@@ -4,6 +4,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+
+val keyProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) load(file.inputStream())
+}
+
 android {
     namespace = "com.example.overtime"
     compileSdk = flutter.compileSdkVersion
@@ -16,23 +23,25 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.overtime"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = keyProperties["keyAlias"] as String?
+            keyPassword = keyProperties["keyPassword"] as String?
+            storeFile = keyProperties["storeFile"]?.let { file("${rootProject.projectDir}/${it as String}") }
+            storePassword = keyProperties["storePassword"] as String?
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
-            // 开启 R8 并应用 proguard 规则：修复 flutter_local_notifications
-            // 在 release 下反序列化定时通知抛 "Missing type parameter" 的崩溃。
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
