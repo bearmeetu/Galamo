@@ -73,10 +73,9 @@ class OvertimeRecord {
       return periods!;
     }
     // 兼容旧数据：使用主 on/off 对
-    if (onSeconds != null) {
-      return [TimePeriod(startSeconds: onSeconds!, endSeconds: offSeconds)];
-    }
-    return [];
+    // 工作日不需要 onSeconds，使用0作为起始时间（compute 函数会从 17:30 开始计算）
+    final start = onSeconds ?? 0;
+    return [TimePeriod(startSeconds: start, endSeconds: offSeconds)];
   }
 
   Map<String, dynamic> toJson() => {

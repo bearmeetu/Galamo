@@ -153,7 +153,13 @@ class _RecordPageState extends State<RecordPage> {
 
   OvertimeResult? get _preview {
     if (_baseSalary == null) return null;
-    if (_periods.isEmpty && _onSeconds == null) return null;
+    // 工作日只需要下班时间即可预览
+    final hasWorkdayOff = _dayType == DayType.workday && _offSeconds > 0;
+    // 周末/节假日需要上下班时间
+    final hasWeekendHoliday = _onSeconds != null;
+    // 有多时段也可以预览
+    final hasPeriods = _periods.isNotEmpty;
+    if (!hasWorkdayOff && !hasWeekendHoliday && !hasPeriods) return null;
     final rec = _buildRecord();
     return OvertimeCalculator.compute(rec, _baseSalary!);
   }
