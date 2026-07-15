@@ -94,20 +94,55 @@ class OvertimeCalculator {
       if (rec.leave) {
         raw = 0.0; // 工作日请假，不计加班
       } else {
-        final off = rec.offSeconds.toDouble();
-        if (off <= _workdayStartSec) {
+        // 工作日：只计算 17:30 之后的时间
+        final periods = rec.allPeriods;
+        if (periods.isEmpty) {
           raw = 0.0;
         } else {
-          raw = (off - _workdayStartSec) / 3600 - (rec.hadMeal ? _mealDeduction : 0);
+          // 找出最早进入和最晚离开的时间
+          int earliestIn = periods.first.startSeconds;
+          int latestOut = periods.first.endSeconds;
+          for (final p in periods) {
+            if (p.startSeconds < earliestIn) earliestIn = p.startSeconds;
+            if (p.endSeconds > latestOut) latestOut = p.endSeconds;
+          }
+
+          // 计算中间间隔（离开公司的时长）
+          double gapHours = 0;
+          if (periods.length > 1) {
+            // 按开始时间排序
+            final sorted = List<TimePeriod>.from(periods)
+              ..sort((a, b) => a.startSeconds.compareTo(b.startSeconds));
+            // 计算相邻时段之间的间隔
+            for (int i = 0; i < sorted.length - 1; i++) {
+              final gap = sorted[i + 1].startSeconds - sorted[i].endSeconds;
+              if (gap > 0) gapHours += gap / 3600;
+            }
+          }
+
+          // 只计算 17:30 之后的时间
+          if (latestOut <= _workdayStartSec) {
+            raw = 0.0;
+          } else {
+            // 如果最早进入在 17:30 之前，从 17:30 开始算
+            final startSec = earliestIn < _workdayStartSec ? _workdayStartSec : earliestIn;
+            // 实际加班时长 = 最晚离开 - max(最早进入, 17:30) - 间隔
+            raw = (latestOut - startSec) / 3600 - gapHours - (rec.hadMeal ? _mealDeduction : 0);
+          }
         }
       }
     } else {
-      // 周末 / 节假日：下班 - 上班 - 用餐
-      if (rec.onSeconds == null) {
+      // 周末 / 节假日：使用多时段支持
+      final periods = rec.allPeriods;
+      if (periods.isEmpty) {
         raw = 0.0;
       } else {
-        final diff = (rec.offSeconds - rec.onSeconds!) / 3600;
-        raw = diff - (rec.hadMeal ? _mealDeduction : 0);
+        // 计算所有时段的总时长
+        double totalHours = 0;
+        for (final p in periods) {
+          totalHours += p.durationHours;
+        }
+        raw = totalHours - (rec.hadMeal ? _mealDeduction : 0);
       }
     }
     if (raw < 0) raw = 0.0;
@@ -144,7 +179,10 @@ class OvertimeCalculator {
       if (budget <= 0) break;
       final take = _r2(e.value.claimableHours < budget ? e.value.claimableHours : budget);
       // 该天可申报加班的「自然起点」：工作日从 17:30 起算，周末/节假日用实际上班打卡
-      final startSec = e.key.dayType == DayType.workday ? _workdayStartSec : (e.key.onSeconds ?? _workdayStartSec);
+      final periods = e.key.allPeriods;
+      final startSec = e.key.dayType == DayType.workday
+          ? _workdayStartSec
+          : (periods.isNotEmpty ? periods.first.startSeconds : (e.key.onSeconds ?? _workdayStartSec));
       // 申报区间 = 起点 + take 小时（精确到秒），被 36h 上限截断时只取前面一段
       final declaredSec = (take * 3600).round();
       final endSec = startSec + declaredSec;

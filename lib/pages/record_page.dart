@@ -17,12 +17,13 @@ class RecordPage extends StatefulWidget {
 class _RecordPageState extends State<RecordPage> {
   DateTime _date = DateTime.now();
   int? _onSeconds;
-  int _offSeconds = 22 * 3600; // 默认 22:00:00
+  int _offSeconds = 22 * 3600;
   bool _hadMeal = false;
   bool _leave = false;
   String? _reason;
   double? _baseSalary;
   List<OvertimeRecord> _monthRecords = [];
+  List<TimePeriod> _periods = [];
 
   @override
   void initState() {
@@ -73,6 +74,7 @@ class _RecordPageState extends State<RecordPage> {
         _date = d;
         _onSeconds = null;
         _leave = false;
+        _periods = [];
       });
       _load();
     }
@@ -92,7 +94,6 @@ class _RecordPageState extends State<RecordPage> {
     }
   }
 
-  /// 精确到秒的时间选择（原生 TimePicker 只到分钟，这里用三列滚轮自定义）
   Future<int?> _showSecondPicker(int initial) async {
     var h = initial ~/ 3600;
     var m = (initial % 3600) ~/ 60;
@@ -152,19 +153,33 @@ class _RecordPageState extends State<RecordPage> {
 
   OvertimeResult? get _preview {
     if (_baseSalary == null) return null;
+    if (_periods.isEmpty && _onSeconds == null) return null;
     final rec = _buildRecord();
     return OvertimeCalculator.compute(rec, _baseSalary!);
   }
 
-  OvertimeRecord _buildRecord() => OvertimeRecord(
+  OvertimeRecord _buildRecord() {
+    if (_periods.isNotEmpty) {
+      return OvertimeRecord(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         date: _date,
-        onSeconds: _onSeconds,
-        offSeconds: _offSeconds,
+        offSeconds: _periods.last.endSeconds,
         hadMeal: _hadMeal,
         leave: _leave,
         reason: _reason,
+        periods: _periods,
       );
+    }
+    return OvertimeRecord(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      date: _date,
+      onSeconds: _onSeconds,
+      offSeconds: _offSeconds,
+      hadMeal: _hadMeal,
+      leave: _leave,
+      reason: _reason,
+    );
+  }
 
   void _pickReason() {
     showModalBottomSheet<String?>(
@@ -203,6 +218,51 @@ class _RecordPageState extends State<RecordPage> {
       ),
     ).then((v) {
       if (v != null) setState(() => _reason = v.isEmpty ? null : v);
+    });
+  }
+
+  void _addPeriod() async {
+    int startSec = 18 * 3600;
+    int endSec = 20 * 3600;
+    final result = await showModalBottomSheet<Map<String, int>>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.rTop))),
+      builder: (c) => _PeriodPickerDialog(startSec: startSec, endSec: endSec),
+    );
+    if (result != null) {
+      setState(() {
+        _periods.add(TimePeriod(
+          startSeconds: result['start']!,
+          endSeconds: result['end']!,
+        ));
+        _periods.sort((a, b) => a.startSeconds.compareTo(b.startSeconds));
+      });
+    }
+  }
+
+  void _editPeriod(int index) async {
+    final period = _periods[index];
+    final result = await showModalBottomSheet<Map<String, int>>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.rTop))),
+      builder: (c) => _PeriodPickerDialog(startSec: period.startSeconds, endSec: period.endSeconds),
+    );
+    if (result != null) {
+      setState(() {
+        _periods[index] = TimePeriod(
+          startSeconds: result['start']!,
+          endSeconds: result['end']!,
+        );
+        _periods.sort((a, b) => a.startSeconds.compareTo(b.startSeconds));
+      });
+    }
+  }
+
+  void _removePeriod(int index) {
+    setState(() {
+      _periods.removeAt(index);
     });
   }
 
@@ -335,10 +395,14 @@ class _RecordPageState extends State<RecordPage> {
         children: [
           _row('日期', _dateLabel, onTap: _pickDate),
           const Divider(color: AppTheme.divider, height: 1),
-          _row('上班时间', _onSeconds == null ? '（工作日无需）' : OvertimeRecord.fmt(_onSeconds!), onTap: () => _pickTime(true)),
+          _periodsSection(),
           const Divider(color: AppTheme.divider, height: 1),
-          _row('下班时间', OvertimeRecord.fmt(_offSeconds), onTap: () => _pickTime(false)),
-          const Divider(color: AppTheme.divider, height: 1),
+          if (_periods.isEmpty) ...[
+            _row('上班时间', _onSeconds == null ? '（工作日无需）' : OvertimeRecord.fmt(_onSeconds!), onTap: () => _pickTime(true)),
+            const Divider(color: AppTheme.divider, height: 1),
+            _row('下班时间', OvertimeRecord.fmt(_offSeconds), onTap: () => _pickTime(false)),
+            const Divider(color: AppTheme.divider, height: 1),
+          ],
           _row('加班原因', _reason ?? '（可选）', onTap: _pickReason),
           const Divider(color: AppTheme.divider, height: 1),
           SwitchListTile(
@@ -359,6 +423,69 @@ class _RecordPageState extends State<RecordPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _periodsSection() {
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('多次进出', style: AppTheme.bodyText),
+          subtitle: _periods.isEmpty
+              ? const Text('适用于下班后多次进出公司的场景', style: AppTheme.tagText)
+              : Text('${_periods.length} 个时间段', style: AppTheme.tagText),
+          trailing: IconButton(
+            icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryOrange),
+            onPressed: _addPeriod,
+            tooltip: '添加时间段',
+          ),
+        ),
+        ..._periods.asMap().entries.map((entry) {
+          final index = entry.key;
+          final period = entry.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.bgLight,
+                borderRadius: AppTheme.smallRadius,
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.access_time, size: 16, color: AppTheme.primaryOrange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${OvertimeRecord.fmt(period.startSeconds)} - ${OvertimeRecord.fmt(period.endSeconds)}',
+                      style: const TextStyle(fontSize: 14, color: AppTheme.textPrimary),
+                    ),
+                  ),
+                  Text(
+                    '${period.durationHours.toStringAsFixed(1)}h',
+                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.textHint),
+                    onPressed: () => _editPeriod(index),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18, color: AppTheme.textHint),
+                    onPressed: () => _removePeriod(index),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
     );
   }
 
@@ -428,7 +555,13 @@ class _RecordPageState extends State<RecordPage> {
                       children: [
                         Text('${r.date.month}/${r.date.day} · ${r.dayTypeLabel}', style: AppTheme.cardTitle.copyWith(fontSize: 15)),
                         const SizedBox(height: 4),
-                        Text('下班 ${r.offLabel}${r.hadMeal ? ' · 用餐' : ''}${r.leave ? ' · 请假' : ''}${r.reason != null ? ' · ${r.reason}' : ''}', style: AppTheme.captionText),
+                        if (r.periods != null && r.periods!.isNotEmpty)
+                          Text(
+                            r.periods!.map((p) => '${OvertimeRecord.fmt(p.startSeconds)}-${OvertimeRecord.fmt(p.endSeconds)}').join(', '),
+                            style: AppTheme.captionText,
+                          )
+                        else
+                          Text('下班 ${r.offLabel}${r.hadMeal ? ' · 用餐' : ''}${r.leave ? ' · 请假' : ''}${r.reason != null ? ' · ${r.reason}' : ''}', style: AppTheme.captionText),
                       ],
                     ),
                   ),
@@ -444,4 +577,120 @@ class _RecordPageState extends State<RecordPage> {
       ],
     );
   }
+}
+
+class _PeriodPickerDialog extends StatefulWidget {
+  const _PeriodPickerDialog({required this.startSec, required this.endSec});
+
+  final int startSec;
+  final int endSec;
+
+  @override
+  State<_PeriodPickerDialog> createState() => _PeriodPickerDialogState();
+}
+
+class _PeriodPickerDialogState extends State<_PeriodPickerDialog> {
+  late int _startH;
+  late int _startM;
+  late int _startS;
+  late int _endH;
+  late int _endM;
+  late int _endS;
+
+  @override
+  void initState() {
+    super.initState();
+    _startH = widget.startSec ~/ 3600;
+    _startM = (widget.startSec % 3600) ~/ 60;
+    _startS = widget.startSec % 60;
+    _endH = widget.endSec ~/ 3600;
+    _endM = (widget.endSec % 3600) ~/ 60;
+    _endS = widget.endSec % 60;
+  }
+
+  int get _startTotal => _startH * 3600 + _startM * 60 + _startS;
+  int get _endTotal => _endH * 3600 + _endM * 60 + _endS;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 380,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消', style: TextStyle(color: AppTheme.textSecondary)),
+                ),
+                Text('选择时间段', style: AppTheme.cardTitle),
+                TextButton(
+                  onPressed: _startTotal < _endTotal
+                      ? () => Navigator.pop(context, {'start': _startTotal, 'end': _endTotal})
+                      : null,
+                  child: Text('确定', style: TextStyle(
+                    color: _startTotal < _endTotal ? AppTheme.primaryOrange : AppTheme.textHint,
+                    fontWeight: FontWeight.w500,
+                  )),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppTheme.divider),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Text('进入：', style: AppTheme.bodyText),
+                Expanded(child: _buildTimePicker(_startH, _startM, _startS, (h, m, s) {
+                  setState(() { _startH = h; _startM = m; _startS = s; });
+                })),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Text('离开：', style: AppTheme.bodyText),
+                Expanded(child: _buildTimePicker(_endH, _endM, _endS, (h, m, s) {
+                  setState(() { _endH = h; _endM = m; _endS = s; });
+                })),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimePicker(int h, int m, int s, Function(int, int, int) onChanged) {
+    return SizedBox(
+      height: 120,
+      child: CupertinoTheme(
+        data: const CupertinoThemeData(),
+        child: Row(
+          children: [
+            _wheel(0, 23, h, (v) => onChanged(v, m, s)),
+            const Text(':', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: AppTheme.textPrimary)),
+            _wheel(0, 59, m, (v) => onChanged(h, v, s)),
+            const Text(':', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500, color: AppTheme.textPrimary)),
+            _wheel(0, 59, s, (v) => onChanged(h, m, v)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _wheel(int min, int max, int value, void Function(int) onChanged) => Expanded(
+    child: CupertinoPicker(
+      scrollController: FixedExtentScrollController(initialItem: value),
+      itemExtent: 36,
+      onSelectedItemChanged: onChanged,
+      children: [for (var i = min; i <= max; i++) Center(child: Text(i.toString().padLeft(2, '0'), style: const TextStyle(fontSize: 18, color: AppTheme.textPrimary)))],
+    ),
+  );
 }

@@ -1,5 +1,25 @@
 import 'package:overtime/data/holidays.dart';
 
+/// 一个时间段（进出公司的一对时间）
+class TimePeriod {
+  TimePeriod({required this.startSeconds, required this.endSeconds});
+
+  final int startSeconds; // 进入时间（秒）
+  final int endSeconds; // 离开时间（秒）
+
+  double get durationHours => (endSeconds - startSeconds) / 3600;
+
+  Map<String, dynamic> toJson() => {
+        'start': startSeconds,
+        'end': endSeconds,
+      };
+
+  factory TimePeriod.fromJson(Map<String, dynamic> json) => TimePeriod(
+        startSeconds: json['start'] ?? 0,
+        endSeconds: json['end'] ?? 0,
+      );
+}
+
 /// 一条加班打卡记录
 class OvertimeRecord {
   OvertimeRecord({
@@ -10,6 +30,7 @@ class OvertimeRecord {
     required this.hadMeal,
     required this.leave,
     this.reason,
+    this.periods,
   });
 
   final String id;
@@ -19,6 +40,7 @@ class OvertimeRecord {
   final bool hadMeal; // 是否用餐（扣 0.5h）
   final bool leave; // 工作日是否请假（请假则不计加班）
   final String? reason; // 加班原因（可选）
+  final List<TimePeriod>? periods; // 多次进出时间段（支持同一天多次进出）
 
   static const List<String> reasons = ['Jira跟踪', 'Case开发', '会议对齐', 'Fail分析', '知识分享'];
 
@@ -45,6 +67,18 @@ class OvertimeRecord {
   String get offLabel => fmt(offSeconds);
   String get onLabel => onSeconds == null ? '--:--:--' : fmt(onSeconds!);
 
+  /// 获取所有时间段（如果 periods 为空，则返回主 on/off 对）
+  List<TimePeriod> get allPeriods {
+    if (periods != null && periods!.isNotEmpty) {
+      return periods!;
+    }
+    // 兼容旧数据：使用主 on/off 对
+    if (onSeconds != null) {
+      return [TimePeriod(startSeconds: onSeconds!, endSeconds: offSeconds)];
+    }
+    return [];
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'date': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
@@ -53,10 +87,12 @@ class OvertimeRecord {
         'hadMeal': hadMeal,
         'leave': leave,
         'reason': reason,
+        'periods': periods?.map((p) => p.toJson()).toList(),
       };
 
   factory OvertimeRecord.fromJson(Map<String, dynamic> json) {
     final parts = (json['date'] as String).split('-');
+    final periodsRaw = json['periods'] as List?;
     return OvertimeRecord(
       id: json['id'],
       date: DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2])),
@@ -65,6 +101,7 @@ class OvertimeRecord {
       hadMeal: json['hadMeal'] ?? false,
       leave: json['leave'] ?? false,
       reason: json['reason'] as String?,
+      periods: periodsRaw?.map((p) => TimePeriod.fromJson(p as Map<String, dynamic>)).toList(),
     );
   }
 }
