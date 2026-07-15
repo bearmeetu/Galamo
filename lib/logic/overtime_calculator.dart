@@ -94,41 +94,26 @@ class OvertimeCalculator {
       if (rec.leave) {
         raw = 0.0; // 工作日请假，不计加班
       } else {
-        // 工作日：只计算 17:30 之后的时间
+        // 工作日：只计算 17:30 之后的时间，每个时段分别判断
         final periods = rec.allPeriods;
         if (periods.isEmpty) {
           raw = 0.0;
         } else {
-          // 找出最早进入和最晚离开的时间
-          int earliestIn = periods.first.startSeconds;
-          int latestOut = periods.first.endSeconds;
+          // 分别计算每个时段在 17:30 之后的时长
+          // 每个时段需要 >= 1小时才计入加班
+          double overtimeHours = 0;
           for (final p in periods) {
-            if (p.startSeconds < earliestIn) earliestIn = p.startSeconds;
-            if (p.endSeconds > latestOut) latestOut = p.endSeconds;
-          }
-
-          // 计算中间间隔（离开公司的时长）
-          double gapHours = 0;
-          if (periods.length > 1) {
-            // 按开始时间排序
-            final sorted = List<TimePeriod>.from(periods)
-              ..sort((a, b) => a.startSeconds.compareTo(b.startSeconds));
-            // 计算相邻时段之间的间隔
-            for (int i = 0; i < sorted.length - 1; i++) {
-              final gap = sorted[i + 1].startSeconds - sorted[i].endSeconds;
-              if (gap > 0) gapHours += gap / 3600;
+            // 如果该时段完全在 17:30 之前，跳过
+            if (p.endSeconds <= _workdayStartSec) continue;
+            // 计算该时段在 17:30 之后的部分
+            final startInPeriod = p.startSeconds > _workdayStartSec ? p.startSeconds : _workdayStartSec;
+            final periodOvertime = (p.endSeconds - startInPeriod) / 3600;
+            // 每个时段需要 >= 1小时才计入加班
+            if (periodOvertime >= 1) {
+              overtimeHours += periodOvertime;
             }
           }
-
-          // 只计算 17:30 之后的时间
-          if (latestOut <= _workdayStartSec) {
-            raw = 0.0;
-          } else {
-            // 如果最早进入在 17:30 之前，从 17:30 开始算
-            final startSec = earliestIn < _workdayStartSec ? _workdayStartSec : earliestIn;
-            // 实际加班时长 = 最晚离开 - max(最早进入, 17:30) - 间隔
-            raw = (latestOut - startSec) / 3600 - gapHours - (rec.hadMeal ? _mealDeduction : 0);
-          }
+          raw = overtimeHours - (rec.hadMeal ? _mealDeduction : 0);
         }
       }
     } else {
